@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import geopandas as gpd
 
 class Plotter():
 
@@ -10,4 +11,12 @@ class Plotter():
         # if not os.path.exists(f"../images/{name}"):
         #     os.mkdir(f"../images/{name}")
         # plt.savefig(f"../images/{name}/{roof}.png", bbox_inches='tight')
+        plt.show()
+
+    def segmented_polygons_2d(polygons):
+        name = "segmented_polygons_2d"
+        colors = ['b', 'c', 'g', 'k', 'm', 'r', 'w', 'y']
+        poly_colors = [colors[i] for i in range(len(polygons))]
+        myPoly = gpd.GeoSeries(polygons)
+        myPoly.plot(color=poly_colors)
         plt.show()
