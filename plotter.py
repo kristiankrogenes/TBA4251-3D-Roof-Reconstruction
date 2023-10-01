@@ -9,9 +9,9 @@ class Plotter():
         name = "scatterplot_3d"
         fig = plt.figure()
         colors = ['b', 'c', 'g', 'k', 'm', 'r', 'w', 'y']
-        poly_colors = [colors[i] for i in sources]
+        # poly_colors = [colors[i] for i in sources]
         ax = plt.axes(projection='3d')
-        ax.scatter(x, y, z, s=size/4, c=poly_colors)
+        ax.scatter(x, y, z, s=size/4, c=color)
         # if not os.path.exists(f"../images/{name}"):
         #     os.mkdir(f"../images/{name}")
         # plt.savefig(f"../images/{name}/{roof}.png", bbox_inches='tight')

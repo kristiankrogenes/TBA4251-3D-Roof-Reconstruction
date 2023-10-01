@@ -72,14 +72,10 @@ def ransac(x, y, z, s):
     return best_params, best_inliers
 
 def extract_variables_from_las_object(las):
-    # x = list(np.concatenate([list(pc.X) for pc in las]).flat)
-    # y = list(np.concatenate([list(pc.Y) for pc in las]).flat)
-    # z = list(np.concatenate([list(pc.Z) for pc in las]).flat)
-    # c = list(np.concatenate([[las.index(pc) for i in list(pc.X)] for pc in las]).flat)
-    x = list(las.X)
-    y = list(las.Y)
-    z = list(las.Z)
-    rgb = [(r/255, g/255, b/255) for r, g, b in zip(las.red, las.green, las.blue)]
+    x = np.array(list(las.X))
+    y = np.array(list(las.Y))
+    z = np.array(list(las.Z))
+    rgb = np.array([(r/255, g/255, b/255) for r, g, b in zip(las.red, las.green, las.blue)])
 
     # Used to adjust the size of the scatterplot points
     ys = np.random.randint(130, 195, len(x))
@@ -183,3 +179,103 @@ def fit_polygons_to_roofs(self):
     polygon_df.geometry = polygon_df.geometry.apply(lambda x: x.simplify(thresh(x), preserve_topology=False))
 
     return polygon_df.reset_index()
+
+def angle_between_vectors(v1, v2):
+    dot_product = np.dot(v1, v2)
+
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+
+    angle_radians = np.arccos(dot_product / (norm_v1 * norm_v2))
+
+    return angle_radians
+
+def check_point_sides(p1, p2, p3, i, j):
+    p1, p2, p3 = np.array(p1), np.array(p2), np.array(p3)
+
+    if p2[0] > p1[0] and p3[0] > p1[0]:
+        if p2[1] > p1[1] and p3[1] > p1[1]:
+            if p2[0] > p3[0]:
+                return [i, p2], [j, p3]
+            else:
+                return [j, p3], [i, p2]
+        if p2[1] < p1[1] and p3[1] < p1[1]:
+            if p2[0] > p3[0]:
+                return [j, p3], [i, p2]
+            else:
+                return [i, p2], [j, p3]
+        if p2[1] < p1[1] and p3[1] > p1[1]:
+            return [i, p2], [j, p3]
+        if p2[1] > p1[1] and p3[1] < p1[1]:
+            return [j, p3], [i, p2]
+        
+    elif p2[0] < p1[0] and p3[0] < p1[0]:
+        if p2[1] > p1[1] and p3[1] > p1[1]:
+            if p2[0] > p3[0]:
+                return [i, p2], [j, p3]
+            else:
+                return [j, p3], [i, p2]
+        elif p2[1] < p1[1] and p3[1] < p1[1]:    
+            if p2[0] > p3[0]:
+                return [j, p3], [i, p2]
+            else:
+                return [i, p2], [j, p3]
+        elif p2[1] < p1[1] and p3[1] > p1[1]:
+            return [j, p3], [i, p2]
+        elif p2[1] > p1[1] and p3[1] < p1[1]:
+            return [i, p2], [j, p3]
+        else:
+            return None, None
+        
+    elif p2[0] > p1[0] and p3[0] < p1[0]:
+        if p2[1] > p1[1] and p3[1] > p1[1]:
+            return [i, p2], [j, p3]
+        elif p2[1] < p1[1] and p3[1] < p1[1]:
+            return [j, p3], [i, p2]
+        elif p2[1] > p1[1] and p3[1] < p1[1]:
+            angle2 = angle_between_vectors(p2[:2]-p1[:2], np.array([1, 0]))
+            angle3 = angle_between_vectors(p3[:2]-p1[:2], np.array([-1, 0]))
+            if angle2 > angle3:
+                return [i, p2], [j, p3]
+            else:
+                return [j, p3], [i, p2]
+        elif p2[1] < p1[1] and p3[1] > p1[1]:
+            angle2 = angle_between_vectors(p2[:2]-p1[:2], np.array([1, 0]))
+            angle3 = angle_between_vectors(p3[:2]-p1[:2], np.array([-1, 0]))
+            if angle2 > angle3:
+                return [j, p3], [i, p2]
+            else:
+                return [i, p2], [j, p3]
+        else:
+            return None, None
+            
+    elif p2[0] < p1[0] and p3[0] > p1[0]:
+        if p2[1] > p1[1] and p3[1] > p1[1]:
+            return [j, p3], [i, p2]
+        elif p2[1] < p1[1] and p3[1] < p1[1]:
+            return [i, p2], [j, p3]
+        elif p2[1] > p1[1] and p3[1] < p1[1]:
+            angle2 = angle_between_vectors(p2[:2]-p1[:2], np.array([-1, 0]))
+            angle3 = angle_between_vectors(p3[:2]-p1[:2], np.array([1, 0]))
+            if angle2 > angle3:
+                return [j, p3], [i, p2]
+            else:
+                return [i, p2], [j, p3]
+        elif p2[1] < p1[1] and p3[1] > p1[1]:
+            angle2 = angle_between_vectors(p2[:2]-p1[:2], np.array([1, 0]))
+            angle3 = angle_between_vectors(p3[:2]-p1[:2], np.array([-1, 0]))
+            if angle2 > angle3:
+                return [i, p2], [j, p3]
+            else:
+                return [j, p3], [i, p2]
+        else:
+            return None, None
+    else:
+        return None, None
+    
+p1 = [5.67309600e+05, 7.02657393e+06, 1.69043021e+02]
+p2, p3 = [5.67313312e+05, 7.02657969e+06, 1.67060000e+02], [5.67315358e+05, 7.02657018e+06, 1.67060000e+02]
+a = check_point_sides(p1, p2, p3, 0, 4)
+print(p2[0] > p1[0], p3[0] > p1[0])
+print(p2[1] > p1[1], p3[1] < p1[1])
+print(a)

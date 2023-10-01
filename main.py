@@ -1,12 +1,12 @@
 from plotter import Plotter
-from helpers import extract_variables_from_las_object, ransac, is_equal_color
+from helpers import extract_variables_from_las_object, ransac, is_equal_color, check_point_sides
 import os
 import laspy
 import numpy as np
 import alphashape 
 import geopandas as gpd
 import pandas as pd
-from shapely import Polygon
+from shapely import Polygon, MultiPoint, LineString
 from scipy.linalg import lstsq
 import matplotlib.pyplot as plt
 
@@ -40,7 +40,6 @@ class Lo2D():
             for roof_id in data[roof_type]:
                 roof = data[roof_type][roof_id]
                 rgb = [(r, g, b) for r, g, b in zip(roof.red, roof.green, roof.blue)]
-
                 unique_rgbs = list(set(rgb))
                 segments = np.array([None for _ in range(len(rgb))])
                 for i, unique_rgb in enumerate(unique_rgbs):
@@ -48,7 +47,15 @@ class Lo2D():
                     segments = [i if k else j for k, j in zip(s, segments)]
                 data[roof_type][roof_id].point_source_id = segments
         return data
-    
+    # Blue, lihtgreen, red, lightblue, pink, green
+
+    # [3,    0,      1,        5,     4,   2]
+    # [lb, blue, lightgreen, green, pink, red]
+
+
+
+    # (3, 2, 5), (0, 1, 4), (4, 5)
+
     def fit_planes_to_roof_segments(self):
         roofs_df = pd.DataFrame(columns=[
             'roof_type', 
@@ -62,7 +69,6 @@ class Lo2D():
 
         for roof_type in self.roofs:
             for roof_id in self.roofs[roof_type]:
-                # print(self.roofs[roof_type][roof_id].point_source_id)
                 segment_ids = list(set(self.roofs[roof_type][roof_id].point_source_id))
                 min_z = np.inf
                 for sid in segment_ids:
@@ -101,19 +107,20 @@ class Lo2D():
         intersection_df = pd.DataFrame(columns=["roof_id", "intersection_point", "triple_intersection", "direction_vector", "s1", "s2"])
 
         for roof_type in roof_types:
-            if roof_type=="hipped":
+            if roof_type=="hipped" or "corner_element":
                 roofs = self.roofs_df.loc[self.roofs_df['roof_type'] == roof_type]
                 rids = list(set(list(roofs['roof_id'])))
                 for roof_id in rids:
                     roof_segments = roofs.loc[self.roofs_df['roof_id'] == roof_id]
+                    segment_ids = list(roof_segments["segment_id"])
                     segment_planes = list(roof_segments["plane_coefficients"])
                     if len(segment_planes) > 1:
-                        for i in range(len(segment_planes)):
-                            for j in range(i+1, len(segment_planes)):
-                                for k in range(j+1, len(segment_planes)):
-                                    A1, B1, C1 = segment_planes[i]
-                                    A2, B2, C2 = segment_planes[j]
-                                    A3, B3, C3 = segment_planes[k]
+                        for indexi, i in enumerate(segment_ids):
+                            for indexj, j in enumerate(segment_ids[indexi+1:]):
+                                for indexk, k in enumerate(segment_ids[indexi+1+indexj+1:]):
+                                    A1, B1, C1 = segment_planes[indexi]
+                                    A2, B2, C2 = segment_planes[indexi+1+indexj]
+                                    A3, B3, C3 = segment_planes[indexi+1+indexj+1+indexk]
 
                                     A = np.array([[A1, B1, -1], [A2, B2, -1], [A3, B3, -1]])
                                     b = np.array([-C1, -C2, -C3])
@@ -144,7 +151,7 @@ class Lo2D():
                                     intersection_df = pd.concat([intersection_df, pd.DataFrame(new_row)])
         return intersection_df.reset_index()
     
-    def match_intersections(self, roof_id):
+    def create_roof_polygons_from_planes(self, roof_id):
         polygon_points = []
         intersections = self.intersection_df.loc[self.intersection_df['roof_id'] == roof_id]
         intersections = intersections.reset_index()
@@ -169,56 +176,164 @@ class Lo2D():
 
             si, sj, sk = int(intersections.loc[i]["s1"]), int(intersections.loc[i]["s2"]), int(intersections.loc[i]["s3"])
 
-            if distance([IP[2]], [z_max]) < 0.1:
+
+            if distance([IP[2]], [z_max]) < 0.2:
                 labeled_points[i] = {}
                 labeled_points[i]["segments"] = [si, sj, sk]
                 labeled_points[i]["ip"] = IP
                 if flat_index == 0:
                     labeled_points[i][f'{sj}{sk}'] = EPs[0]
                     labeled_points[i][f'{si}{sk}'] = EPs[1]
+                    left, right = check_point_sides(IP, EPs[0], EPs[1], sj, si)
+                    labeled_points[i]['neighbours'] = [left[0], sk, right[0]]
+                    labeled_points[i]['right_ep'] = right[1]
+                    labeled_points[i]['left_ep'] = left[1]
+                    labeled_points[i]['center'] = [sj, sk, si]
+                    labeled_points[i]['p1'] = EPs[0]
+                    labeled_points[i]['p2'] = EPs[1]
                 if flat_index == 1:
                     labeled_points[i][f'{si}{sj}'] = EPs[0]
                     labeled_points[i][f'{si}{sk}'] = EPs[1]
+                    left, right = check_point_sides(IP, EPs[0], EPs[1], sj, sk)
+                    labeled_points[i]['neighbours'] = [left[0], si, right[0]]
+                    labeled_points[i]['right_ep'] = right[1]
+                    labeled_points[i]['left_ep'] = left[1]
+                    labeled_points[i]['center'] = [sj, si, sk]
+                    labeled_points[i]['p1'] = EPs[0]
+                    labeled_points[i]['p2'] = EPs[1]
                 if flat_index == 2:
                     labeled_points[i][f'{si}{sj}'] = EPs[0]
                     labeled_points[i][f'{sj}{sk}'] = EPs[1]
-
-                polygon_points.append([IP, EPs[0], EPs[1]])
+                    left, right = check_point_sides(IP, EPs[0], EPs[1], si, sk)
+                    labeled_points[i]['neighbours'] = [left[0], sj, right[0]]
+                    labeled_points[i]['right_ep'] = right[1]
+                    labeled_points[i]['left_ep'] = left[1]
+                    labeled_points[i]['center'] = [si, sj, sk]
+                    labeled_points[i]['p1'] = EPs[0]
+                    labeled_points[i]['p2'] = EPs[1]
 
         joined_intersections = list(labeled_points.keys())
-        segments1, segments2 = labeled_points[joined_intersections[0]]['segments'], labeled_points[joined_intersections[1]]['segments']
-        join_segments = np.array(segments1) == np.array(segments2)
-        opposites_index = list(join_segments).index(False)
 
-        if opposites_index == 0:
-            sp1 = [f'{segments1[0]}{segments1[1]}', f'{segments2[0]}{segments2[1]}']
-            sp2 = [f'{segments1[0]}{segments1[2]}', f'{segments2[0]}{segments2[2]}']
-        if opposites_index == 1:
-            sp1 = [f'{segments1[0]}{segments1[1]}', f'{segments2[0]}{segments2[1]}']
-            sp2 = [f'{segments1[1]}{segments1[2]}', f'{segments2[1]}{segments2[2]}']
-        if opposites_index == 2:
-            sp1 = [f'{segments1[0]}{segments1[2]}', f'{segments2[0]}{segments2[2]}']
-            sp2 = [f'{segments1[1]}{segments1[2]}', f'{segments2[1]}{segments2[2]}']
+        neighbours = [labeled_points[i]['neighbours'] for i in joined_intersections]
+        counts = [[neighbours[c][1]==nb[0] or neighbours[c][1]==nb[2] for nb in neighbours] for c in range(len(neighbours))]
+        counts2 = [n for n, count in enumerate(counts) if not any(count)]
 
-        polygon_points.append(
-            [
-                labeled_points[joined_intersections[0]]['ip'], 
-                labeled_points[joined_intersections[0]][sp1[0]],
-                labeled_points[joined_intersections[1]][sp1[1]],
-                labeled_points[joined_intersections[1]]['ip'],
-            ]
-        )
-        polygon_points.append(
-            [
-                labeled_points[joined_intersections[0]]['ip'], 
-                labeled_points[joined_intersections[0]][sp2[0]],
-                labeled_points[joined_intersections[1]][sp2[1]],
-                labeled_points[joined_intersections[1]]['ip'],
-            ]
-        )
-        
-        return [Polygon(coords) for coords in polygon_points]
+        for ei, edge_index in enumerate(counts2):
 
+            joined_intersection = labeled_points[joined_intersections[edge_index]]
+            
+            other_ei = 0 if ei==1 else 1
+            other_ji = labeled_points[joined_intersections[counts2[other_ei]]]
+            other_right_neighbour = other_ji['neighbours'][2]
+            other_left_neighbour = other_ji['neighbours'][0]
+
+            if len(neighbours) > 2:
+                left_neighbour, right_neighbour = joined_intersection['neighbours'][0], joined_intersection['neighbours'][2]
+
+                left_index = [neighbour[1]==left_neighbour for neighbour in neighbours].index(True)
+                right_index = [neighbour[1]==right_neighbour for neighbour in neighbours].index(True)
+
+                left_intersection = labeled_points[joined_intersections[left_index]]
+                left_intersection_left_neighbour_index = left_intersection['center'].index(other_right_neighbour)
+                
+                right_intersection = labeled_points[joined_intersections[right_index]]
+                right_intersection_right_neighbour_index = right_intersection['center'].index(other_left_neighbour)
+                
+                polygon_points.append(
+                    [
+                        joined_intersection['ip'], 
+                        joined_intersection['right_ep'],
+                        joined_intersection['left_ep'],
+                    ]
+                )
+                polygon_points.append(
+                    [
+                        joined_intersection['ip'], 
+                        joined_intersection['left_ep'],
+                        left_intersection['ip'],
+                        left_intersection['p1'] if left_intersection_left_neighbour_index==0 else left_intersection['p2'],
+                    ]
+                )
+                polygon_points.append(
+                    [
+                        joined_intersection['ip'],
+                        joined_intersection['right_ep'], 
+                        right_intersection['ip'],
+                        right_intersection['p1'] if right_intersection_right_neighbour_index==0 else right_intersection['p2'],
+                    ]
+                )
+            else:
+                polygon_points.append(
+                    [
+                        joined_intersection['ip'], 
+                        joined_intersection['right_ep'],
+                        joined_intersection['left_ep'],
+                    ]
+                )
+                polygon_points.append(
+                    [
+                        joined_intersection['ip'], 
+                        joined_intersection['left_ep'],
+                        other_ji['ip'],
+                        other_ji['right_ep']
+
+                    ]
+                )
+
+        """
+        print(roof_id)
+        print(segments)
+        print()
+        for i in range(len(segments)):
+            for j in range(i+1, len(segments)):
+
+                s1, s2 = set(segments[i]), set(segments[j])
+                equals = list(s1.intersection(s2))
+                opposites = list(s1.symmetric_difference(s2))
+                
+                if len(equals) == 2:
+                    roof_info = self.roofs_df.loc[self.roofs_df['roof_id'] == roof_id]
+                    sdv1 = list(list(roof_info.loc[roof_info['segment_id'] == opposites[0]]['plane_coefficients'])[0][:2])+[-1]
+                    sdv2 = list(list(roof_info.loc[roof_info['segment_id'] == opposites[1]]['plane_coefficients'])[0][:2])+[-1]
+                    cross_product = np.cross(sdv1, sdv2)
+
+                    if abs(cross_product[0]) > 0.1 and abs(cross_product[1]) > 0.1:
+                        if abs(cross_product[2] < 0.1):
+
+                            print(segments[i])
+                            print(segments[j])
+                            
+                            sp1 = [sorted([opposites[0], equals[0]]), sorted([opposites[1], equals[0]])]
+                            sp2 = [sorted([opposites[0], equals[1]]), sorted([opposites[1], equals[1]])]
+                            sp1 = [f'{str(sp[0])}{str(sp[1])}' for sp in sp1]
+                            sp2 = [f'{str(sp[0])}{str(sp[1])}' for sp in sp2]
+
+                            try:
+                                polygon_points.append(
+                                    [
+                                        labeled_points[joined_intersections[i]]['ip'], 
+                                        labeled_points[joined_intersections[i]][sp1[0]],
+                                        labeled_points[joined_intersections[j]][sp1[1]],
+                                        labeled_points[joined_intersections[j]]['ip'],
+                                    ]
+                                )
+                            except Exception as ex:
+                                print("First", ex)
+                            
+                            try:
+                                polygon_points.append(
+                                    [
+                                        labeled_points[joined_intersections[i]]['ip'], 
+                                        labeled_points[joined_intersections[i]][sp2[0]],
+                                        labeled_points[joined_intersections[j]][sp2[1]],
+                                        labeled_points[joined_intersections[j]]['ip'],
+                                    ]
+                                )
+                            except Exception as ex:
+                                print("Second", ex)
+                            print()
+        """
+        return [MultiPoint(coords).convex_hull for coords in polygon_points]
 
     def fit(self):
 
@@ -231,18 +346,24 @@ class Lo2D():
             "geometry": []
         }
 
-        roof_types = ['hipped']
+        roof_types = ['hipped', 'corner_element']
 
         for roof_type in roof_types:
-            match roof_type:
-                case "hipped":
-                    ids = list(set(list(self.roofs_df.loc[self.roofs_df['roof_type'] == roof_type]['roof_id'])))
+            ids = list(set(list(self.roofs_df.loc[self.roofs_df['roof_type'] == roof_type]['roof_id'])))
 
-                    for id in ids:
-                        new_rows["roof_type"].append(roof_type)
-                        new_rows["roof_id"].append(id)
-                        new_rows["geometry"].append(self.match_intersections(id))
-                        print(new_rows)
+            for id in ids:
+                new_rows["roof_type"].append(roof_type)
+                new_rows["roof_id"].append(id)
+
+                match roof_type:
+                    case "corner_element":
+                        new_rows["geometry"].append(self.create_roof_polygons_from_planes(id))
+                    case "hipped":
+                        new_rows["geometry"].append(self.create_roof_polygons_from_planes(id))
+                    
+
+
+
         self.polygon_roofs_df = pd.DataFrame(new_rows)
     
     def plot_data(self, plot_type):
