@@ -58,11 +58,14 @@ class Plotter():
         plt.suptitle(id)  # Set a common title for the entire figure
         plt.show()
 
-    def double_segmented_polygons_3d(id, roof1, roof2):
+    def double_segmented_polygons_3d(id, roof1, roof2, x, y, z, s, c):
         fig = plt.figure(figsize=(10, 5))
 
         ax1 = fig.add_subplot(121, projection='3d')
         ax2 = fig.add_subplot(122, projection='3d')
+
+        for i in range(len(x)):
+            ax1.scatter(x[i], y[i], z[i], s=s/4, c=c)
 
         xmins, xmaxs = [], []
         ymins, ymaxs = [], []
@@ -83,7 +86,7 @@ class Plotter():
             zmaxs.append(zmax)
 
             # Create Poly3DCollection for the 3D polygons
-            poly1_collection = Poly3DCollection([roof1_3d], facecolors='b', linewidths=1, edgecolors='r', alpha=0.25)
+            poly1_collection = Poly3DCollection([roof1_3d], facecolors='b', linewidths=1, edgecolors='g', alpha=0.25)
             poly2_collection = Poly3DCollection([roof2_3d], facecolors='c', linewidths=1, edgecolors='g', alpha=0.25)
 
             # Add the Poly3DCollections to the 3D axis

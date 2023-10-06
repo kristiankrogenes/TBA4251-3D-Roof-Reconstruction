@@ -1,76 +1,25 @@
-import os
-import laspy
 import numpy as np
-import alphashape 
-import geopandas as gpd
 import pandas as pd
-from scipy import optimize
-import math
 from sklearn.cluster import DBSCAN
 from shapely import Polygon
 
-def plane_equation(params, x, y, z):
-    A, B, C, D = params
-    return A * x + B * y + C * z + D
+def find_min_max_values(x, y, z):
+    x_min_index = list(x).index(min(x))
+    x_max_index = list(x).index(max(x))
+    y_min_index = list(y).index(min(y))
+    y_max_index = list(y).index(max(y))
+    z_min_index = list(z).index(min(z))
+    z_max_index = list(z).index(max(z))
 
-def plane_parameters(points):
+    xmin_point = (x[x_min_index], y[x_min_index], z[x_min_index])
+    xmax_point = (x[x_max_index], y[x_max_index], z[x_max_index])
+    ymin_point = (x[y_min_index], y[y_min_index], z[y_min_index])
+    ymax_point = (x[y_max_index], y[y_max_index], z[y_max_index])
+    zmin_point = (x[z_min_index], y[z_min_index], z[z_min_index])
+    zmax_point = (x[z_max_index], y[z_max_index], z[z_max_index])
 
-    V1 = (points[1][0] - points[0][0], points[1][1] - points[0][1], points[1][2] - points[0][2])
-    V2 = (points[2][0] - points[0][0], points[2][1] - points[0][1], points[2][2] - points[0][2])
-
-    A = np.float32(V1[1] * V2[2] - V1[2] * V2[1])
-    B = np.float32(V1[2] * V2[0] - V1[0] * V2[2])
-    C = np.float32(V1[0] * V2[1] - V1[1] * V2[0])
-
-    D = -A * np.float32(points[0][0]) - B * np.float32(points[0][1]) - C * np.float32(points[0][2])
+    return xmin_point, xmax_point, ymin_point, ymax_point, zmin_point, zmax_point
     
-    return [A, B, C, D]
-
-def point_to_plane_distance(params, point):
-    x, y, z = point
-    return np.abs(plane_equation(params, x, y, z)) / np.sqrt(params[0]**2 + params[1]**2 + params[2]**2)
-
-
-def ransac(x, y, z, s):
-    points = np.array([[xi, yi, zi] for xi, yi, zi in zip(x, y, z)])
-
-    num_iterations = 100
-    sample_size = 3
-    threshold_distance = 1
-
-    best_params = None
-    best_inliers = None
-    best_num_inliers = 0
-
-    for _ in range(num_iterations):
-
-        sample_indices = np.random.choice(len(points), size=sample_size, replace=False)
-        # sample_indices = np.array([10, 20, 30])
-
-        sample_points = points[sample_indices]
-
-        # Fit a plane to the sampled points using least squares
-        # params, _ = optimize.curve_fit(plane_equation, sample_points[0], sample_points[1], sample_points[2])
-        params = plane_parameters(sample_points)
-
-        # Compute distances from all points to the fitted plane
-        distances = np.array([point_to_plane_distance(params, point) for point in points])
-
-        # Count inliers (points within the threshold distance of the plane)
-        num_inliers = np.sum(distances < threshold_distance)
-
-        # Check if this is the best model so far
-        if num_inliers >= best_num_inliers:
-            best_num_inliers = num_inliers
-            best_params = params
-            best_inliers = points[distances < threshold_distance]
-    
-    print("Best plane parameters (A, B, C, D):", best_params)
-    print("Number of inliers:", best_num_inliers)
-    print("Inlier points:", best_inliers)
-
-    return best_params, best_inliers
-
 def extract_variables_from_las_object(las):
     x = np.array(list(las.X))
     y = np.array(list(las.Y))
@@ -86,23 +35,6 @@ def extract_variables_from_las_object(las):
 
 def is_equal_color(rgb1, rgb2):
     return rgb1[0]==rgb2[0] and rgb1[1]==rgb2[1] and rgb1[2]==rgb2[2]
-
-def create_polygon_from_roof_segment(las):
-    poly = alphashape.alphashape(las.xyz, 1.1)
-    poly_df = gpd.GeoDataFrame([{'geometry': poly, 'classification': 1}, {'geometry': poly, 'classification': 2}])
-    return poly_df
-
-def get_alpha_shape_polygons(roof_segments):
-    """
-    Generates polygons from point cloud data with Alpha Shape algorithm \n
-    Returns Pandas DataFrame with all segments in a roof
-    """
-    alpha_shape = [alphashape.alphashape(l.xyz, 0) for l in roof_segments]
-    df_list = [{'geometry': alpha_shape[i], 'classification': i} for i in range(len(alpha_shape))]
-    df = gpd.GeoDataFrame(df_list)
-    thresh = lambda x: 0.7 if x.area > 10 else 0.4
-    df.geometry = df.geometry.apply(lambda x: x.simplify(thresh(x), preserve_topology=False))
-    return df
 
 def cluster_roof_polygons(self):
 
@@ -159,26 +91,46 @@ def cluster_roof_polygons(self):
 
     return df_clustered_roof_polygons.reset_index()
 
-def fit_polygons_to_roofs(self):
-    polygon_df = pd.DataFrame(columns=['roof_type', 'roof_id', 'geometry'])
+def intersect_2planes(plane1, plane2):
+    A1, B1, C1, D1 = plane1
+    A2, B2, C2, D2 = plane2
+    
+    A = np.array([[A1, B1, C1], [A2, B2, C2]])
+    b = np.array([-D1, -D2])
 
-    for roof_type in self.roofs:
-        for roof_id in self.roofs[roof_type]:
-            roof = self.roofs[roof_type][roof_id]
-            segment_ids = list(set(roof.point_source_id))
+    intersection = np.dot(np.linalg.inv(A[:,:2]), b)
+    double_intersection = np.append(intersection, 0, axis=None)
 
-            for sid in segment_ids:
-                roof_segment_coords = np.array([id==sid for id in roof.point_source_id])
-                coords = np.array(roof.xyz)[roof_segment_coords]
-                alpha = alphashape.alphashape(coords, 0)
-                pdf = {"roof_type": [roof_type], "roof_id": [roof_id], "geometry": [alpha]}
-                df = pd.DataFrame(pdf)
-                polygon_df = pd.concat([polygon_df, df])
+    direction_vector = np.cross(A[0], A[1])
 
-    thresh = lambda x: 0.7 if x.area > 10 else 0.4
-    polygon_df.geometry = polygon_df.geometry.apply(lambda x: x.simplify(thresh(x), preserve_topology=False))
+    return double_intersection, direction_vector
 
-    return polygon_df.reset_index()
+def intersect_3planes(plane1, plane2, plane3):
+    A1, B1, C1, D1 = plane1
+    A2, B2, C2, D2 = plane2
+    A3, B3, C3, D3 = plane3
+
+    A = np.array([[A1, B1, C1], [A2, B2, C2], [A3, B3, C3]])
+    b = np.array([-D1, -D2, -D3])
+
+    triple_intersection = np.dot(np.linalg.pinv(A), b)
+
+    # Find intersection points where z=0
+    A1, A2, A3 = A[:2,:2], A[1:,:2], np.array([A[0][:2], A[2][:2]])
+    b1, b2, b3 = b[:2], b[1:], np.array([b[0], b[2]])
+
+    ip1 = np.dot(np.linalg.pinv(A1), b1)
+    ip2 = np.dot(np.linalg.pinv(A2), b2)
+    ip3 = np.dot(np.linalg.pinv(A3), b3)
+
+    dv1 = np.cross(A[0], A[1])
+    dv2 = np.cross(A[1], A[2])
+    dv3 = np.cross(A[0], A[2])
+
+    double_intersections = [np.append(ip1, 0, axis=None), np.append(ip2, 0, axis=None), np.append(ip3, 0, axis=None)]
+    direction_vectors = [dv1, dv2, dv3]
+
+    return triple_intersection, double_intersections, direction_vectors
 
 def angle_between_vectors(v1, v2):
     dot_product = np.dot(v1, v2)
@@ -272,10 +224,3 @@ def check_point_sides(p1, p2, p3, i, j):
             return None, None
     else:
         return None, None
-    
-p1 = [5.67309600e+05, 7.02657393e+06, 1.69043021e+02]
-p2, p3 = [5.67313312e+05, 7.02657969e+06, 1.67060000e+02], [5.67315358e+05, 7.02657018e+06, 1.67060000e+02]
-a = check_point_sides(p1, p2, p3, 0, 4)
-print(p2[0] > p1[0], p3[0] > p1[0])
-print(p2[1] > p1[1], p3[1] < p1[1])
-print(a)
