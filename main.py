@@ -1,5 +1,5 @@
 from plotter import Plotter
-from helpers import extract_variables_from_las_object, is_equal_color, check_point_sides, intersect_3planes, intersect_2planes, find_min_max_values
+from helpers import extract_variables_from_las_object, is_equal_color, check_point_sides, intersect_3planes, intersect_2planes, find_min_max_values, find_segment_matches, distance
 import os
 import laspy
 import numpy as np
@@ -208,6 +208,103 @@ class Lo2D():
 
         return self.create_polygons(roof_type, labeled_points)
 
+    def sort_cross_element_roof_segments(self, roof_type, roof_id):
+        roof = self.roofs_df.loc[self.roofs_df['roof_id'] == roof_id]
+        segment_ids = list(roof["segment_id"])
+        segment_planes = list(roof["plane_coefficients"])
+
+        xs, ys, zs = list(roof["x_coordinates"]), list(roof["y_coordinates"]), list(roof["z_coordinates"])
+        print(roof_id)
+        intersections, gabled_matches, main_index, sub0_index, sub1_index = find_segment_matches(segment_ids, segment_planes, xs, ys, zs, True)
+        print("MATCHES", gabled_matches)
+        main, sub0, sub1 = gabled_matches[main_index], gabled_matches[sub0_index], gabled_matches[sub1_index]
+        print(main, sub0, sub1)
+
+        minx_sub0_seg0, maxx_sub0_seg0, _, _, minz_sub0_seg0, _ = find_min_max_values(xs[sub0[0]], ys[sub0[0]], zs[sub0[0]])
+        minx_sub1_seg0, maxx_sub1_seg0, _, _, minz_sub1_seg0, _ = find_min_max_values(xs[sub1[0]], ys[sub1[0]], zs[sub1[0]])
+        minx_main_seg0, maxx_main_seg0, _, _, minz_main_seg0, _ = find_min_max_values(xs[main[0]], ys[main[0]], zs[main[0]])
+        minx_main_seg1, maxx_main_seg1, _, _, minz_main_seg1, _ = find_min_max_values(xs[main[1]], ys[main[1]], zs[main[1]])
+
+        _, _, _, _, minz_sub0_seg1, _ = find_min_max_values(xs[sub0[1]], ys[sub0[1]], zs[sub0[1]])
+        _, _, _, _, minz_sub1_seg1, _ = find_min_max_values(xs[sub1[1]], ys[sub1[1]], zs[sub1[1]])
+
+        global_zmin = min(minz_sub0_seg0[2], minz_sub1_seg0[2], minz_main_seg0[2], minz_main_seg1[2])
+
+        # MAIN SUB0
+        closest_main_sub0 = 0 if distance(minz_sub0_seg0, minz_main_seg0)+distance(minz_sub0_seg1, minz_main_seg0) < distance(minz_sub0_seg0, minz_main_seg1)+distance(minz_sub0_seg1, minz_main_seg1) else 1
+        main_sub0_tip, main_sub0_ips, main_sub0_dvs = intersect_3planes(
+            segment_planes[sub0[0]], 
+            segment_planes[sub0[1]], 
+            segment_planes[main[closest_main_sub0]]
+        )
+        print("SUB0", main[closest_main_sub0], sub0[0], sub0[1])
+        main_sub0_eps = [p + global_zmin/dv[2] * dv for p, dv in zip(main_sub0_ips, main_sub0_dvs) if abs(dv[2]) > 0.1]
+
+        # MAIN SUB1
+        closest_main_sub1 = 0 if distance(minz_sub1_seg0, minz_main_seg0)+distance(minz_sub1_seg1, minz_main_seg0) < distance(minz_sub1_seg0, minz_main_seg1)+distance(minz_sub1_seg1, minz_main_seg1) else 1
+        main_sub1_tip, main_sub1_ips, main_sub1_dvs = intersect_3planes(
+            segment_planes[sub1[0]], 
+            segment_planes[sub1[1]], 
+            segment_planes[main[closest_main_sub1]]
+        )
+        print("SUB1", main[closest_main_sub1], sub1[0], sub1[1])
+        main_sub1_eps = [p + global_zmin/dv[2] * dv for p, dv in zip(main_sub1_ips, main_sub1_dvs) if abs(dv[2]) > 0.1]
+
+        # SUB0 EDGE
+        sub0_edge_ref_point = minx_sub0_seg0 if distance(minx_sub0_seg0, main_sub0_tip) > distance(maxx_sub0_seg0, main_sub0_tip) else maxx_sub0_seg0
+        sub0_intersection_dv = intersections[sub0_index][1]
+        sub0_edge_plane = [sub0_intersection_dv[0], sub0_intersection_dv[1], 0, -sub0_intersection_dv[0]*sub0_edge_ref_point[0] - sub0_intersection_dv[1]*sub0_edge_ref_point[1] - 0*sub0_edge_ref_point[2]]
+        
+        sub0_tip, sub0_ips, sub0_dvs = intersect_3planes(
+            segment_planes[sub0[0]], 
+            segment_planes[sub0[1]], 
+            sub0_edge_plane
+        )
+        sub0_eps = [p + global_zmin/dv[2] * dv for p, dv in zip(sub0_ips, sub0_dvs) if abs(dv[2]) > 0.1]
+
+        # SUB1 EDGE
+        sub1_edge_ref_point = minx_sub1_seg0 if distance(minx_sub1_seg0, main_sub1_tip) > distance(maxx_sub1_seg0, main_sub1_tip) else maxx_sub1_seg0
+        sub1_intersection_dv = intersections[sub1_index][1]
+        sub1_edge_plane = [sub1_intersection_dv[0], sub1_intersection_dv[1], 0, -sub1_intersection_dv[0]*sub1_edge_ref_point[0] - sub1_intersection_dv[1]*sub1_edge_ref_point[1] - 0*sub1_edge_ref_point[2]]
+        
+        sub1_tip, sub1_ips, sub1_dvs = intersect_3planes(
+            segment_planes[sub1[0]], 
+            segment_planes[sub1[1]], 
+            sub1_edge_plane
+        )
+        sub1_eps = [p + global_zmin/dv[2] * dv for p, dv in zip(sub1_ips, sub1_dvs) if abs(dv[2]) > 0.1]
+
+        # MAIN EDGE1
+        main_intersection_dv = intersections[main_index][1]
+        main_edge_plane1 = [main_intersection_dv[0], main_intersection_dv[1], 0, -main_intersection_dv[0]*minx_main_seg0[0] - main_intersection_dv[1]*minx_main_seg0[1] - 0*minx_main_seg0[2]]
+        main_edge_plane2 = [main_intersection_dv[0], main_intersection_dv[1], 0, -main_intersection_dv[0]*maxx_main_seg0[0] - main_intersection_dv[1]*maxx_main_seg0[1] - 0*maxx_main_seg0[2]]
+
+        main_tip1, main_ips1, main_dvs1 = intersect_3planes(
+            segment_planes[main[0]], 
+            segment_planes[main[1]], 
+            main_edge_plane1
+        )
+        main_eps1 = [p + global_zmin/dv[2] * dv for p, dv in zip(main_ips1, main_dvs1) if abs(dv[2]) > 0.1]
+
+        main_tip2, main_ips2, main_dvs2 = intersect_3planes(
+            segment_planes[main[0]], 
+            segment_planes[main[1]], 
+            main_edge_plane2
+        )
+        main_eps2 = [p + global_zmin/dv[2] * dv for p, dv in zip(main_ips2, main_dvs2) if abs(dv[2]) > 0.1]
+
+        ind0 = 1 if closest_main_sub0==0 else 0
+        ind1 = 1 if closest_main_sub1==0 else 0
+
+        return self.create_polygons(roof_type, {
+            "p1": [main_sub0_tip, main_sub0_eps[0], sub0_eps[0], sub0_tip],
+            "p2": [main_sub0_tip, main_sub0_eps[1], sub0_eps[1], sub0_tip],
+            "p3": [main_sub1_tip, main_sub1_eps[0], sub1_eps[0], sub1_tip],
+            "p4": [main_sub1_tip, main_sub1_eps[1], sub1_eps[1], sub1_tip],
+            "p5": [main_sub0_tip, main_sub0_eps[0], main_eps1[ind0], main_tip1, main_tip2, main_eps2[ind0], main_sub0_eps[1]],
+            "p6": [main_sub1_tip, main_sub1_eps[0], main_eps1[ind1], main_tip1, main_tip2, main_eps2[ind1], main_sub1_eps[1]],
+        })
+
     def sort_telement_roof_segments(self, roof_type, roof_id):
 
         roof = self.roofs_df.loc[self.roofs_df['roof_id'] == roof_id]
@@ -216,17 +313,7 @@ class Lo2D():
 
         xs, ys, zs = list(roof["x_coordinates"]), list(roof["y_coordinates"]), list(roof["z_coordinates"])
 
-        intersections = []
-        gabled_matches = []
-        for indexi, i in enumerate(segment_ids):
-            for indexj, j in enumerate(segment_ids[indexi+1:]):
-                    intersection, direction_vector = intersect_2planes(
-                        segment_planes[indexi], 
-                        segment_planes[indexi+1+indexj], 
-                    )
-                    if abs(direction_vector[2]) < 0.1:
-                        gabled_matches.append([indexi,  indexi+1+indexj])
-                        intersections.append([intersection, direction_vector])
+        intersections, gabled_matches = find_segment_matches(segment_ids, segment_planes, xs, ys, zs)
 
         main_roof_match = 0 if max(zs[gabled_matches[0][0]]) > max(zs[gabled_matches[1][0]]) else 1
         sub_roof_match = 1 if main_roof_match == 0 else 0
@@ -238,8 +325,7 @@ class Lo2D():
         
         global_zmin = min(minz_sub_seg0[2], minz_sub_seg1[2], minz_main_seg0[2], minz_main_seg1[2])
 
-        distance = lambda p1, p2: np.sqrt(np.sum([(j-i)**2 for i, j in zip(p1, p2)]))
-        closest_main_segment = 0 if distance(minz_sub_seg0, minz_main_seg0) < distance(minz_sub_seg0, minz_main_seg1) else 1
+        closest_main_segment = 0 if distance(minz_sub_seg0, minz_main_seg0)+distance(minz_sub_seg1, minz_main_seg0) < distance(minz_sub_seg0, minz_main_seg1)+distance(minz_sub_seg1, minz_main_seg1) else 1
 
         main_sub_tip, main_sub_ips, main_sub_dvs = intersect_3planes(
             segment_planes[gabled_matches[sub_roof_match][0]], 
@@ -277,7 +363,7 @@ class Lo2D():
         )
         main_eps2 = [p + global_zmin/dv[2] * dv for p, dv in zip(main_ips2, main_dvs2) if abs(dv[2]) > 0.1]
 
-        ind = 1 if closest_main_segment==0 else 1
+        ind = 1 if closest_main_segment==0 else 0
         return self.create_polygons(roof_type, {
             "p1": [main_sub_tip, main_sub_eps[0], sub_eps[0], sub_tip],
             "p2": [main_sub_tip, main_sub_eps[1], sub_eps[1], sub_tip],
@@ -363,6 +449,14 @@ class Lo2D():
             polygon_points.append(Polygon(labeled_points["p3"]))
             polygon_points.append(MultiPoint(labeled_points["p4"]).convex_hull)
             return polygon_points
+        elif roof_type=="cross_element":
+            polygon_points.append(MultiPoint(labeled_points["p1"]).convex_hull)
+            polygon_points.append(MultiPoint(labeled_points["p2"]).convex_hull)
+            polygon_points.append(MultiPoint(labeled_points["p3"]).convex_hull)
+            polygon_points.append(MultiPoint(labeled_points["p4"]).convex_hull)
+            polygon_points.append(Polygon(labeled_points["p5"]))
+            polygon_points.append(Polygon(labeled_points["p6"]))
+            return polygon_points
         else:
             joined_intersections = list(labeled_points.keys())
 
@@ -444,7 +538,7 @@ class Lo2D():
             "geometry": []
         }
 
-        roof_types = ['hipped', 'corner_element', 'gabled', 'flat', 't-element']
+        roof_types = ['hipped', 'corner_element', 'gabled', 'flat', 't-element', 'cross_element']
 
         for roof_type in roof_types:
             ids = list(set(list(self.roofs_df.loc[self.roofs_df['roof_type'] == roof_type]['roof_id'])))
@@ -464,6 +558,8 @@ class Lo2D():
                         new_rows["geometry"].append(self.sort_flat_roof_segment(roof_type, id))
                     case "t-element":
                         new_rows["geometry"].append(self.sort_telement_roof_segments(roof_type, id))
+                    case "cross_element":
+                        new_rows["geometry"].append(self.sort_cross_element_roof_segments(roof_type, id))
 
         self.polygon_roofs_df = pd.DataFrame(new_rows)
     

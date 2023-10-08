@@ -19,6 +19,68 @@ def find_min_max_values(x, y, z):
     zmax_point = (x[z_max_index], y[z_max_index], z[z_max_index])
 
     return xmin_point, xmax_point, ymin_point, ymax_point, zmin_point, zmax_point
+
+def distance(p1, p2): 
+    return np.sqrt(np.sum([(j-i)**2 for i, j in zip(p1, p2)]))
+
+def find_segment_matches(segment_ids, segment_planes, xs, ys, zs, cross_element=False):
+
+    intersections = []
+    gabled_matches = []
+    for indexi, i in enumerate(segment_ids):
+        for indexj, j in enumerate(segment_ids[indexi+1:]):
+                intersection, direction_vector = intersect_2planes(
+                    segment_planes[indexi], 
+                    segment_planes[indexi+1+indexj], 
+                )
+                if abs(direction_vector[2]) < 0.1:
+                    if segment_planes[indexi][3]>0 and segment_planes[indexi+1+indexj][3]<0 or segment_planes[indexi][3]<0 and segment_planes[indexi+1+indexj][3]>0:
+                        gabled_matches.append([indexi,  indexi+1+indexj])
+                        intersections.append([intersection, direction_vector])
+    print("Gabled matches:", gabled_matches)
+    if cross_element:
+
+        # minx_s0, _, _, _, _, maxz_s0 = find_min_max_values(xs[gabled_matches[0][0]], ys[gabled_matches[0][0]], zs[gabled_matches[0][0]])
+        # minx_s1, _, _, _, _, maxz_s1 = find_min_max_values(xs[gabled_matches[1][0]], ys[gabled_matches[1][0]], zs[gabled_matches[1][0]])
+        # minx_s2, _, _, _, _, maxz_s2 = find_min_max_values(xs[gabled_matches[2][0]], ys[gabled_matches[2][0]], zs[gabled_matches[2][0]])
+        # minx_s3, _, _, _, _, maxz_s3 = find_min_max_values(xs[gabled_matches[3][0]], ys[gabled_matches[3][0]], zs[gabled_matches[3][0]])
+        # minx_s4, _, _, _, _, maxz_s4 = find_min_max_values(xs[gabled_matches[4][0]], ys[gabled_matches[4][0]], zs[gabled_matches[4][0]])
+
+        # min_xs = [minx_s0, minx_s1, minx_s2, minx_s3, minx_s4]
+        # max_zs = [maxz_s0, maxz_s1, maxz_s2, maxz_s3, maxz_s4]
+
+        main_roof_match_index = None
+        for i in segment_ids:
+            count = []
+            for j in range(len(gabled_matches)):
+                if i in gabled_matches[j]:
+                    count.append(j)
+            if len(count) == 1:
+                main_roof_match_index = count[0]
+                break
+
+        sub_gabled_matches = gabled_matches[:main_roof_match_index] + gabled_matches[main_roof_match_index + 1:]
+        print("subs", sub_gabled_matches)
+        similar_index = [sub_gabled_matches[0][0] == sub_gabled_matches[1][0], sub_gabled_matches[0][0] == sub_gabled_matches[2][0], sub_gabled_matches[0][0] == sub_gabled_matches[3][0]].index(True)
+        print(similar_index)
+
+        minx_s0, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[0][0]], ys[sub_gabled_matches[0][0]], zs[sub_gabled_matches[0][0]])
+        minx_s1, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[0][1]], ys[sub_gabled_matches[0][1]], zs[sub_gabled_matches[0][1]])
+        minx_s2, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[similar_index+1][0]], ys[sub_gabled_matches[similar_index+1][0]], zs[sub_gabled_matches[similar_index+1][0]])
+        minx_s3, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[similar_index+1][1]], ys[sub_gabled_matches[similar_index+1][1]], zs[sub_gabled_matches[similar_index+1][1]])
+
+        distance_sub01 = distance(minx_s0, minx_s1)
+        distance_sub0x = distance(minx_s2, minx_s3)
+
+        sub0 = 0 if distance_sub01 < distance_sub0x else similar_index+1       
+        sub1 = [sub_gabled_matches[sub0][1] in sub_gabled_matches[i] or sub_gabled_matches[sub0][0] in sub_gabled_matches[i] for i in range(len(sub_gabled_matches))].index(False)
+
+        sub0_index = sub0 if sub0 < main_roof_match_index else sub0+1
+        sub1_index = sub1 if sub1 < main_roof_match_index else sub1+1
+        
+        return intersections, gabled_matches, main_roof_match_index, sub0_index, sub1_index
+    else:
+        return intersections, gabled_matches
     
 def extract_variables_from_las_object(las):
     x = np.array(list(las.X))
