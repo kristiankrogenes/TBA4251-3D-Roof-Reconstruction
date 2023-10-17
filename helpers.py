@@ -37,18 +37,8 @@ def find_segment_matches(segment_ids, segment_planes, xs, ys, zs, cross_element=
                     if segment_planes[indexi][3]>0 and segment_planes[indexi+1+indexj][3]<0 or segment_planes[indexi][3]<0 and segment_planes[indexi+1+indexj][3]>0:
                         gabled_matches.append([indexi,  indexi+1+indexj])
                         intersections.append([intersection, direction_vector])
-    print("Gabled matches:", gabled_matches)
+
     if cross_element:
-
-        # minx_s0, _, _, _, _, maxz_s0 = find_min_max_values(xs[gabled_matches[0][0]], ys[gabled_matches[0][0]], zs[gabled_matches[0][0]])
-        # minx_s1, _, _, _, _, maxz_s1 = find_min_max_values(xs[gabled_matches[1][0]], ys[gabled_matches[1][0]], zs[gabled_matches[1][0]])
-        # minx_s2, _, _, _, _, maxz_s2 = find_min_max_values(xs[gabled_matches[2][0]], ys[gabled_matches[2][0]], zs[gabled_matches[2][0]])
-        # minx_s3, _, _, _, _, maxz_s3 = find_min_max_values(xs[gabled_matches[3][0]], ys[gabled_matches[3][0]], zs[gabled_matches[3][0]])
-        # minx_s4, _, _, _, _, maxz_s4 = find_min_max_values(xs[gabled_matches[4][0]], ys[gabled_matches[4][0]], zs[gabled_matches[4][0]])
-
-        # min_xs = [minx_s0, minx_s1, minx_s2, minx_s3, minx_s4]
-        # max_zs = [maxz_s0, maxz_s1, maxz_s2, maxz_s3, maxz_s4]
-
         main_roof_match_index = None
         for i in segment_ids:
             count = []
@@ -60,10 +50,9 @@ def find_segment_matches(segment_ids, segment_planes, xs, ys, zs, cross_element=
                 break
 
         sub_gabled_matches = gabled_matches[:main_roof_match_index] + gabled_matches[main_roof_match_index + 1:]
-        print("subs", sub_gabled_matches)
+        
         similar_index = [sub_gabled_matches[0][0] == sub_gabled_matches[1][0], sub_gabled_matches[0][0] == sub_gabled_matches[2][0], sub_gabled_matches[0][0] == sub_gabled_matches[3][0]].index(True)
-        print(similar_index)
-
+        
         minx_s0, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[0][0]], ys[sub_gabled_matches[0][0]], zs[sub_gabled_matches[0][0]])
         minx_s1, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[0][1]], ys[sub_gabled_matches[0][1]], zs[sub_gabled_matches[0][1]])
         minx_s2, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[similar_index+1][0]], ys[sub_gabled_matches[similar_index+1][0]], zs[sub_gabled_matches[similar_index+1][0]])
@@ -167,7 +156,7 @@ def intersect_2planes(plane1, plane2):
 
     return double_intersection, direction_vector
 
-def intersect_3planes(plane1, plane2, plane3):
+def intersect_3planes(plane1, plane2, plane3, z_value=False):
     A1, B1, C1, D1 = plane1
     A2, B2, C2, D2 = plane2
     A3, B3, C3, D3 = plane3
@@ -178,21 +167,62 @@ def intersect_3planes(plane1, plane2, plane3):
     triple_intersection = np.dot(np.linalg.pinv(A), b)
 
     # Find intersection points where z=0
-    A1, A2, A3 = A[:2,:2], A[1:,:2], np.array([A[0][:2], A[2][:2]])
-    b1, b2, b3 = b[:2], b[1:], np.array([b[0], b[2]])
+    if z_value:
+        A1, A2, A3 = A[:2,:2], A[1:,:2], np.array([A[0][:2], A[2][:2]])
+        # b1, b2, b3 = b[:2]-np.array([A[0][2]*z_value, A[1][2]*z_value]), b[1:]-np.array([A[1][2]*z_value, A[2][2]*z_value]), np.array([b[0], b[2]])-np.array([A[0][2]*z_value, A[2][2]*z_value])
 
-    ip1 = np.dot(np.linalg.pinv(A1), b1)
-    ip2 = np.dot(np.linalg.pinv(A2), b2)
-    ip3 = np.dot(np.linalg.pinv(A3), b3)
+        # A1, A2, A3 = A[:2,:3], A[1:,:3], np.array([A[0][:3], A[2][:3]])
+        b1, b2, b3 = b[:2], b[1:], np.array([b[0], b[2]])
 
-    dv1 = np.cross(A[0], A[1])
-    dv2 = np.cross(A[1], A[2])
-    dv3 = np.cross(A[0], A[2])
+        ip1 = np.dot(np.linalg.pinv(A1), b1)
+        ip2 = np.dot(np.linalg.pinv(A2), b2)
+        ip3 = np.dot(np.linalg.pinv(A3), b3)
 
-    double_intersections = [np.append(ip1, 0, axis=None), np.append(ip2, 0, axis=None), np.append(ip3, 0, axis=None)]
-    direction_vectors = [dv1, dv2, dv3]
+        dv1 = np.cross(A[0], A[1])
+        dv2 = np.cross(A[1], A[2])
+        dv3 = np.cross(A[0], A[2])
 
-    return triple_intersection, double_intersections, direction_vectors
+        double_intersections = [np.append(ip1, 0, axis=None), np.append(ip2, 0, axis=None), np.append(ip3, 0, axis=None)]
+        # double_intersections = [np.append(ip1, z_value, axis=None), np.append(ip2, z_value, axis=None), np.append(ip3, z_value, axis=None)]
+        direction_vectors = [dv1, dv2, dv3]
+
+        double_intersections = [p + z_value/dv[2] * dv for p, dv in zip(double_intersections, direction_vectors) if abs(dv[2]) > 0.1]
+
+        return triple_intersection, double_intersections, direction_vectors
+    else:
+        A1, A2, A3 = A[:2,:2], A[1:,:2], np.array([A[0][:2], A[2][:2]])
+        b1, b2, b3 = b[:2], b[1:], np.array([b[0], b[2]])
+        ip1 = np.dot(np.linalg.pinv(A1), b1)
+        ip2 = np.dot(np.linalg.pinv(A2), b2)
+        ip3 = np.dot(np.linalg.pinv(A3), b3)
+
+        dv1 = np.cross(A[0], A[1])
+        dv2 = np.cross(A[1], A[2])
+        dv3 = np.cross(A[0], A[2])
+
+        double_intersections = [np.append(ip1, 0, axis=None), np.append(ip2, 0, axis=None), np.append(ip3, 0, axis=None)]
+        direction_vectors = [dv1, dv2, dv3]
+
+        return triple_intersection, double_intersections, direction_vectors
+    
+def intersect_4planes(plane1, plane2, plane3, plane4):
+    A1, B1, C1, D1 = plane1
+    A2, B2, C2, D2 = plane2
+    A3, B3, C3, D3 = plane3
+    A4, B4, C4, D4 = plane4
+
+    A = np.array([[A1, B1, C1], [A2, B2, C2], [A3, B3, C3], [A4, B4, C4]])
+    b = np.array([-D1, -D2, -D3, -D4])
+
+    A1, A2, A3, A4 = A[:3], np.array([A[0], A[1], A[3]]), np.array([A[0], A[2], A[3]]), A[1:]
+    b1, b2, b3, b4 = b[:3], np.array([b[0], b[1], b[3]]), np.array([b[0], b[2], b[3]]), b[1:]
+
+    tip1 = np.dot(np.linalg.pinv(A1), b1)
+    tip2 = np.dot(np.linalg.pinv(A2), b2)
+    tip3 = np.dot(np.linalg.pinv(A3), b3)
+    tip4 = np.dot(np.linalg.pinv(A4), b4)
+
+    return (tip1+tip2+tip3+tip4)/4
 
 def angle_between_vectors(v1, v2):
     dot_product = np.dot(v1, v2)

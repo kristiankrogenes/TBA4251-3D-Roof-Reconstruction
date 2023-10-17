@@ -18,46 +18,6 @@ class Plotter():
         plt.title(title)
         plt.show()
 
-    def segmented_polygons_2d(id, polygons):
-        name = "segmented_polygons_2d"
-        colors = ['b', 'c', 'g', 'k', 'm', 'r', 'w', 'y']
-        poly_colors = [colors[i] for i in range(len(polygons))]
-        myPoly = gpd.GeoSeries(polygons)
-        myPoly.plot(color=poly_colors)
-        plt.title(id)
-        plt.show()
-
-    def double_segmented_polygons_2d(id, roof1, roof2):
-        name = "segmented_polygons_2d"
-        colors = ['b', 'c', 'g', 'k', 'm', 'r', 'w', 'y']
-
-        poly_colors1 = [colors[i] for i in range(len(roof1))]
-        myPoly1 = gpd.GeoSeries(roof1)
-        # myPoly1.plot(color=poly_colors1)
-
-        poly_colors2 = [colors[i] for i in range(len(roof2))]
-        myPoly2 = gpd.GeoSeries(roof2)
-        # myPoly2.plot(color=poly_colors2)
-
-        # plt.title(id)
-        # plt.show()
-
-        # fig, ax = plt.subplots()
-        # myPoly1.plot(color=poly_colors1, ax=ax)
-        # myPoly2.plot(color=poly_colors2, ax=ax)
-        # plt.title(id)
-        # plt.show()
-
-        fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with two subplots
-        myPoly1.plot(color=poly_colors1, ax=axes[0])  # Plot in the first subplot
-        myPoly2.plot(color=poly_colors2, ax=axes[1])  # Plot in the second subplot
-
-        axes[0].set_title("Plot 1")  # Set title for the first subplot
-        axes[1].set_title("Plot 2")  # Set title for the second subplot
-
-        plt.suptitle(id)  # Set a common title for the entire figure
-        plt.show()
-
     def double_segmented_polygons_3d(id, roof1, roof2, x, y, z, s, c):
         fig = plt.figure(figsize=(10, 5))
 
@@ -179,40 +139,5 @@ class Plotter():
                 color='b', 
                 label='Line'
             )
-
-        plt.show()
-
-    def intersection_lines_3d(points, xmin, xmax, ymin, ymax, zmin, zmax, ips):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-
-
-        for point in points:
-            # print(point[0][0], point[0][1], point[0][2],)
-            
-            ax.plot(
-                [point[0][0], point[1][0]],
-                [point[0][1], point[1][1]],
-                [point[0][2], point[1][2]],
-                color='b', 
-                label='Line'
-            )
-
-        # points = np.array(points)
-
-        # x1, y1, z1 = points[:,0,0], points[:,0,1], points[:,0,2]
-        # x2, y2, z2 = points[:,1,0], points[:,1,1], points[:,1,2]
-        ips = np.array(ips)
-        x, y, z = ips[:,0], ips[:,1], ips[:,2]
-        ax.scatter(x, y, z, s=10/4, c='r')
-        # ax.scatter(x2, y2, z2, s=10/4, c='b')
-
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-
-        ax.set_xlim([xmin-10, xmax+10])
-        ax.set_ylim([ymin-10, ymax+10])
-        ax.set_zlim([zmin-10, zmax+10])
 
         plt.show()
