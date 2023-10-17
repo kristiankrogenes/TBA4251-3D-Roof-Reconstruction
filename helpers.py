@@ -1,7 +1,4 @@
 import numpy as np
-import pandas as pd
-from sklearn.cluster import DBSCAN
-from shapely import Polygon
 
 def find_min_max_values(x, y, z):
     x_min_index = list(x).index(min(x))
@@ -22,54 +19,6 @@ def find_min_max_values(x, y, z):
 
 def distance(p1, p2): 
     return np.sqrt(np.sum([(j-i)**2 for i, j in zip(p1, p2)]))
-
-def find_segment_matches(segment_ids, segment_planes, xs, ys, zs, cross_element=False):
-
-    intersections = []
-    gabled_matches = []
-    for indexi, i in enumerate(segment_ids):
-        for indexj, j in enumerate(segment_ids[indexi+1:]):
-                intersection, direction_vector = intersect_2planes(
-                    segment_planes[indexi], 
-                    segment_planes[indexi+1+indexj], 
-                )
-                if abs(direction_vector[2]) < 0.1:
-                    if segment_planes[indexi][3]>0 and segment_planes[indexi+1+indexj][3]<0 or segment_planes[indexi][3]<0 and segment_planes[indexi+1+indexj][3]>0:
-                        gabled_matches.append([indexi,  indexi+1+indexj])
-                        intersections.append([intersection, direction_vector])
-
-    if cross_element:
-        main_roof_match_index = None
-        for i in segment_ids:
-            count = []
-            for j in range(len(gabled_matches)):
-                if i in gabled_matches[j]:
-                    count.append(j)
-            if len(count) == 1:
-                main_roof_match_index = count[0]
-                break
-
-        sub_gabled_matches = gabled_matches[:main_roof_match_index] + gabled_matches[main_roof_match_index + 1:]
-        
-        similar_index = [sub_gabled_matches[0][0] == sub_gabled_matches[1][0], sub_gabled_matches[0][0] == sub_gabled_matches[2][0], sub_gabled_matches[0][0] == sub_gabled_matches[3][0]].index(True)
-        
-        minx_s0, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[0][0]], ys[sub_gabled_matches[0][0]], zs[sub_gabled_matches[0][0]])
-        minx_s1, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[0][1]], ys[sub_gabled_matches[0][1]], zs[sub_gabled_matches[0][1]])
-        minx_s2, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[similar_index+1][0]], ys[sub_gabled_matches[similar_index+1][0]], zs[sub_gabled_matches[similar_index+1][0]])
-        minx_s3, _, _, _, _, _ = find_min_max_values(xs[sub_gabled_matches[similar_index+1][1]], ys[sub_gabled_matches[similar_index+1][1]], zs[sub_gabled_matches[similar_index+1][1]])
-
-        distance_sub01 = distance(minx_s0, minx_s1)
-        distance_sub0x = distance(minx_s2, minx_s3)
-
-        sub0 = 0 if distance_sub01 < distance_sub0x else similar_index+1       
-        sub1 = [sub_gabled_matches[sub0][1] in sub_gabled_matches[i] or sub_gabled_matches[sub0][0] in sub_gabled_matches[i] for i in range(len(sub_gabled_matches))].index(False)
-
-        sub0_index = sub0 if sub0 < main_roof_match_index else sub0+1
-        sub1_index = sub1 if sub1 < main_roof_match_index else sub1+1
-        
-        return intersections, gabled_matches, main_roof_match_index, sub0_index, sub1_index
-    else:
-        return intersections, gabled_matches
     
 def extract_variables_from_las_object(las):
     x = np.array(list(las.X))
@@ -86,61 +35,6 @@ def extract_variables_from_las_object(las):
 
 def is_equal_color(rgb1, rgb2):
     return rgb1[0]==rgb2[0] and rgb1[1]==rgb2[1] and rgb1[2]==rgb2[2]
-
-def cluster_roof_polygons(self):
-
-    df_clustered_roof_polygons = pd.DataFrame(columns=['roof_id', 'geometry'])
-    roof_ids = list(set(list(self.polygon_df['roof_id'])))
-
-    for roof_id in roof_ids:
-
-        roof_segments_df = self.polygon_df.loc[self.polygon_df['roof_id'] == roof_id]
-
-        roof_segment_coords = [[coord[:3] for coord in roof_segments_df.iloc[i].geometry.exterior.coords] for i in range(len(roof_segments_df))]
-
-        roof_coords = np.concatenate(roof_segment_coords, axis=0)
-
-        clustering = DBSCAN(eps=2, min_samples=2).fit(roof_coords)
-
-        clusters = {}
-        updated_clustering_labels = []
-        for i, label in enumerate(clustering.labels_):
-            if label==-1:
-                new_label = label*i-1
-                clusters[new_label] = {i: roof_coords[i]}
-                updated_clustering_labels.append(new_label)
-            else:
-                if label in clusters.keys():
-                    clusters[label][i] = roof_coords[i]
-                else:
-                    clusters[label] = {i: roof_coords[i]}
-                updated_clustering_labels.append(label)
-
-        mean_cluster_coords = {}
-        for c in clusters:
-            coords = [clusters[c][p] for p in clusters[c]]
-            mean_coords_x = np.sum([coords[i][0] for i in range(len(coords))]) / len(coords)
-            mean_coords_y = np.sum([coords[i][1] for i in range(len(coords))]) / len(coords)
-            mean_coords_z = np.sum([coords[i][2] for i in range(len(coords))]) / len(coords)
-            mean_cluster_coords[c] = (mean_coords_x, mean_coords_y, mean_coords_z)
-
-        updated_coords = [mean_cluster_coords[c] for c in updated_clustering_labels]
-
-        inndeling = [len(coords) for coords in roof_segment_coords]
-        updated_segment_coords = []
-        index_memory = 0
-        for i in range(len(inndeling)):
-            updated_segment_coords.append(updated_coords[index_memory:index_memory+inndeling[i]])
-            index_memory += inndeling[i]
-
-        clustered_df = {
-            'roof_id': [roof_id for _ in range(len(roof_segments_df))], 
-            'geometry': [Polygon(coords) for coords in updated_segment_coords]
-        }
-        df = pd.DataFrame(clustered_df)
-        df_clustered_roof_polygons = pd.concat([df_clustered_roof_polygons, df])
-
-    return df_clustered_roof_polygons.reset_index()
 
 def intersect_2planes(plane1, plane2):
     A1, B1, C1, D1 = plane1
@@ -169,9 +63,6 @@ def intersect_3planes(plane1, plane2, plane3, z_value=False):
     # Find intersection points where z=0
     if z_value:
         A1, A2, A3 = A[:2,:2], A[1:,:2], np.array([A[0][:2], A[2][:2]])
-        # b1, b2, b3 = b[:2]-np.array([A[0][2]*z_value, A[1][2]*z_value]), b[1:]-np.array([A[1][2]*z_value, A[2][2]*z_value]), np.array([b[0], b[2]])-np.array([A[0][2]*z_value, A[2][2]*z_value])
-
-        # A1, A2, A3 = A[:2,:3], A[1:,:3], np.array([A[0][:3], A[2][:3]])
         b1, b2, b3 = b[:2], b[1:], np.array([b[0], b[2]])
 
         ip1 = np.dot(np.linalg.pinv(A1), b1)
@@ -183,7 +74,7 @@ def intersect_3planes(plane1, plane2, plane3, z_value=False):
         dv3 = np.cross(A[0], A[2])
 
         double_intersections = [np.append(ip1, 0, axis=None), np.append(ip2, 0, axis=None), np.append(ip3, 0, axis=None)]
-        # double_intersections = [np.append(ip1, z_value, axis=None), np.append(ip2, z_value, axis=None), np.append(ip3, z_value, axis=None)]
+        
         direction_vectors = [dv1, dv2, dv3]
 
         double_intersections = [p + z_value/dv[2] * dv for p, dv in zip(double_intersections, direction_vectors) if abs(dv[2]) > 0.1]

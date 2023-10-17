@@ -1,3 +1,7 @@
 __pycache__/
+
+old/
 test.py
 old_hipped.py
+old_helpers.py
+old.py
