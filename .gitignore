@@ -5,3 +5,7 @@ test.py
 old_hipped.py
 old_helpers.py
 old.py
+
+buildings/
+buildings_trondheim/
+Basisdata_5001_Trondheim_25832_Kommuner_GeoJSON.geojson

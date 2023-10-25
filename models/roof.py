@@ -15,6 +15,7 @@ class Roof():
         self.segment_zs = segment_zs
 
         self.global_minz = min([min(z) for z in segment_zs])
+        self.global_maxz = max([max(z) for z in segment_zs])
 
         self.segment_planes = self.get_segment_planes()
 

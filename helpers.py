@@ -1,4 +1,7 @@
 import numpy as np
+import alphashape
+from shapely import Polygon
+import math
 
 def find_min_max_values(x, y, z):
     x_min_index = list(x).index(min(x))
@@ -207,3 +210,55 @@ def check_point_sides(p1, p2, p3, i, j):
             return None, None
     else:
         return None, None
+    
+def get_upper_points(polygon):
+    points = list(polygon.exterior.coords)
+    
+    zs = [p[2] for p in points]
+    # heighest_point_index = zs.index(max(zs))
+    lowest_z = min(zs)
+    # heighest_point = points[heighest_point_index]
+    upper_points = []
+    for i, p in enumerate(points):
+        if distance([p[2]], [lowest_z]) > 1:
+            point_already_exists = False
+            for existing_point in upper_points:
+                if distance(existing_point, points[i]) == 0:
+                    point_already_exists = True 
+                    break
+            if not point_already_exists:
+                upper_points.append(points[i])
+    return upper_points
+
+def create_concave_polygon(points_3d):
+    points = [[p[0], p[1]] for p in points_3d]
+    alpha = alphashape.alphashape(points, 0)
+
+    x, y = alpha.exterior.xy
+
+    concave_polygon = []
+    for xi, yi in zip(x, y):
+        for p in points_3d:
+            if distance([xi, yi], [p[0], p[1]]) == 0:
+                concave_polygon.append([xi, yi, p[2]])
+
+    return Polygon(concave_polygon)
+
+def order_points_clockwise(points_3d):
+    points = [[p[0], p[1]] for p in points_3d]
+    center_x = sum(x for x, _ in points) / len(points)
+    center_y = sum(y for _, y in points) / len(points)
+    
+    calculate_angle = lambda point: math.atan2(point[1] - (center_y-1), point[0] - min(x for x, _ in points))
+    # print(len(points_3d), center_x, center_y-10, )
+    sorted_points = sorted(points, key=calculate_angle)
+
+    for i, p in enumerate(sorted_points):
+        for p_3d in points_3d:
+            if distance(p, p_3d[:2]) == 0:
+                sorted_points[i].append(p_3d[2])
+                break
+    return sorted_points
+
+def order_points_left_to_right(points):
+    return sorted(points, key=lambda point: point[0])

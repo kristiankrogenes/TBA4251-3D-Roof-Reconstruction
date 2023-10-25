@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import numpy as np
+from shapely import MultiPolygon, LineString
 
 class Plotter():
 
@@ -18,14 +19,34 @@ class Plotter():
         plt.title(title)
         plt.show()
 
-    def double_segmented_polygons_3d(id, roof1, roof2, x, y, z, s, c):
+    def polygons_2d(polygon):
+
+        fig, ax = plt.subplots()
+
+        if isinstance(polygon, MultiPolygon):
+            for poly in polygon.geoms:
+                x, y = poly.exterior.xy
+                ax.plot(x, y, 'b-')
+        else:
+            x, y = polygon.exterior.xy
+            ax.plot(x, y, 'b-')
+
+        ax.set_xlabel('X-axis')
+        ax.set_ylabel('Y-axis')
+        ax.set_title('Shapely Polygon Plot')
+        ax.set_aspect('equal')
+
+        plt.show()
+
+    def double_segmented_polygons_3d(id, roof1, roof2, footprint, x, y, z, s, c):
         fig = plt.figure(figsize=(10, 5))
 
         ax1 = fig.add_subplot(121, projection='3d')
         ax2 = fig.add_subplot(122, projection='3d')
 
-        for i in range(len(x)):
-            ax1.scatter(x[i], y[i], z[i], s=s/4, c=c)
+
+        # for i in range(len(x)):
+        #     ax1.scatter(x[i], y[i], z[i], s=s/4, c=c)
 
         xmins, xmaxs = [], []
         ymins, ymaxs = [], []
@@ -53,6 +74,20 @@ class Plotter():
             ax1.add_collection3d(poly1_collection)
             ax2.add_collection3d(poly2_collection)
 
+            ax2.scatter(roof2_3d[0][0], roof2_3d[0][1], roof2_3d[0][2], s=s/4, c='r')
+
+        # fpx, fpy = footprint.exterior.xy
+        # fpz = np.array([max(zmaxs) -9 for _ in range(len(fpx))])
+
+        # footprint_3d = [(x, y, max(zmaxs) -9) for x, y in zip(fpx, fpy)]
+        # footprint_collection = Poly3DCollection([footprint_3d], facecolors='b', linewidths=1, edgecolors='g', alpha=0.25)
+        # ax2.add_collection3d(footprint_collection)
+        # ax2.scatter(fpx, fpy, fpz, s=s/4, c=['b']+['r' for _ in range(len(fpx)-1)])
+
+        # bottom_points = np.array(footprint)
+        bx, by, bz = [x for x, _, _ in footprint],[y for _, y, _ in footprint], [z for _, _, z in footprint]
+        ax2.scatter(bx, by, bz, s=s/4, c='r')
+
         ax1.set_title(f"Roof polygons for hipped roof, ID: {id}")
         ax1.set_xlabel('X')
         ax1.set_ylabel('Y')
@@ -68,7 +103,7 @@ class Plotter():
         ax1.set_zlim([min(zmins) - 1, max(zmaxs) + 1])
         ax2.set_xlim([min(xmins) - 1, max(xmaxs) + 1])
         ax2.set_ylim([min(ymins) - 1, max(ymaxs) + 1])
-        ax2.set_zlim([min(zmins) - 1, max(zmaxs) + 1])
+        ax2.set_zlim([max(zmaxs) -10, max(zmaxs) + 1])
 
         plt.show()
     
@@ -139,5 +174,112 @@ class Plotter():
                 color='b', 
                 label='Line'
             )
+
+        plt.show()
+
+
+    def roof_polygons_with_building_footprint(id, roof, footprint, x, y, z, s, c):
+        fig = plt.figure(figsize=(10, 5))
+
+        ax1 = fig.add_subplot(121, projection='3d')
+
+        xmins, xmaxs = [], []
+        ymins, ymaxs = [], []
+        zmins, zmaxs = [], []
+        # Convert Shapely Polygons to 3D polygons
+        for p1 in roof:
+            roof1_3d = [(x, y, z) for x, y, z in p1.exterior.coords]
+
+            xmin, xmax = min([coord[0] for coord in roof1_3d]), max([coord[0] for coord in roof1_3d])
+            ymin, ymax = min([coord[1] for coord in roof1_3d]), max([coord[1] for coord in roof1_3d])
+            zmin, zmax = min([coord[2] for coord in roof1_3d]), max([coord[2] for coord in roof1_3d])
+            xmins.append(xmin)
+            xmaxs.append(xmax)
+            ymins.append(ymin)
+            ymaxs.append(ymax)
+            zmins.append(zmin)
+            zmaxs.append(zmax)
+
+            # Create Poly3DCollection for the 3D polygons
+            poly1_collection = Poly3DCollection([roof1_3d], facecolors='b', linewidths=1, edgecolors='g', alpha=0.25)
+
+            # Add the Poly3DCollections to the 3D axis
+            ax1.add_collection3d(poly1_collection)
+
+        """
+        if isinstance(footprint, MultiPolygon):
+            for poly in footprint.geoms:
+                x, y = poly.exterior.xy
+                z = [min(zmins)-5 for _ in range(len(x))]
+                # ax1.plot(x, y, 'b-')
+                # x, y, z = poly.exterior.coords
+                fp = [(xi, yi, zi) for xi, yi, zi in zip(x, y, z)]
+                # poly2_collection = Poly3DCollection([poly.exterior.coords], facecolors='b', linewidths=1, edgecolors='g', alpha=0.25)
+                poly2_collection = Poly3DCollection([fp], facecolors='r', linewidths=1, edgecolors='g', alpha=0.25)
+                ax1.add_collection3d(poly2_collection)
+        else:
+            x, y = footprint.exterior.xy
+            z = [min(zmins)-5 for _ in range(len(x))]
+            # print(list(footprint.exterior.coords))
+            # x, y, z = [footprint.exterior.coords
+            fp = [(xi, yi, zi) for xi, yi, zi in zip(x, y, z)]
+            # poly2_collection = Poly3DCollection([footprint.exterior.coords], facecolors='r', linewidths=1, edgecolors='g', alpha=0.25)
+            poly2_collection = Poly3DCollection([fp], facecolors='r', linewidths=1, edgecolors='g', alpha=0.25)
+            ax1.add_collection3d(poly2_collection)
+            # ax1.plot(x, y, 'b-')
+        """
+        for p2 in footprint:
+            if isinstance(p2, LineString):
+                x, y, z = [list(coord) for coord in zip(*p2.coords)]
+                ax1.plot(x, y, z, 'r-')
+            else:
+                poly2_collection = Poly3DCollection([p2.exterior.coords], facecolors='r', linewidths=1, edgecolors='g', alpha=0.25)
+                ax1.add_collection3d(poly2_collection)
+        
+
+        ax1.set_title(f"Roof polygons for roof, ID: {id}")
+        ax1.set_xlabel('X')
+        ax1.set_ylabel('Y')
+        ax1.set_zlabel('Z')
+
+        ax1.set_xlim([min(xmins) - 1, max(xmaxs) + 1])
+        ax1.set_ylim([min(ymins) - 1, max(ymaxs) + 1])
+        ax1.set_zlim([min(zmins) - 6, max(zmaxs) + 1])
+
+        plt.show()
+
+    def lo2d_buildings(roof_id, roof_type, roof_polygons, wall_polygons):
+        fig = plt.figure(figsize=(10, 5))
+        ax = plt.axes(projection='3d')
+
+        for roof_polygon in roof_polygons:
+            poly_collection = Poly3DCollection([roof_polygon.exterior.coords], facecolors='r', linewidths=1, edgecolors='g', alpha=0.25)
+            ax.add_collection3d(poly_collection)
+        
+        for wall_polygon in wall_polygons:
+            poly_collection = Poly3DCollection([wall_polygon.exterior.coords], facecolors='b', linewidths=1, edgecolors='g', alpha=0.25)
+            ax.add_collection3d(poly_collection)
+        
+        x_min, y_min, z_min = float('inf'), float('inf'), float('inf')
+        x_max, y_max, z_max = float('-inf'), float('-inf'), float('-inf')
+
+        for polygon in roof_polygons + wall_polygons:
+            for x, y, z in polygon.exterior.coords:
+                x_min = min(x_min, x)
+                y_min = min(y_min, y)
+                z_min = min(z_min, z)
+                x_max = max(x_max, x)
+                y_max = max(y_max, y)
+                z_max = max(z_max, z)
+                
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+        
+
+        ax.set_title(f"Lo2D: {roof_type} / {roof_id}")
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
 
         plt.show()

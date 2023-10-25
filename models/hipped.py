@@ -44,6 +44,7 @@ class HippedRoof(Roof):
 
         match self.roof_type:
             case "hipped":
+                roof_polygons = [None for _ in range(4)]
                 tip1, eps1, dvs1 = intersect_3planes(
                     self.segment_planes[self.edge_segments[0]], 
                     self.segment_planes[self.gabled_segments[0][0]], 
@@ -56,12 +57,17 @@ class HippedRoof(Roof):
                     self.segment_planes[self.gabled_segments[0][1]],
                     self.global_minz
                 )
-                
-                roof_polygons.append(MultiPoint([tip1, eps1[0], eps1[1]]).convex_hull)
-                roof_polygons.append(MultiPoint([tip2, eps2[0], eps2[1]]).convex_hull)
-                roof_polygons.append(MultiPoint([tip1, tip2, eps1[0], eps2[0]]).convex_hull)
-                roof_polygons.append(MultiPoint([tip1, tip2, eps1[1], eps2[1]]).convex_hull)
+                roof_polygons[self.edge_segments[0]] = MultiPoint([tip1, eps1[0], eps1[1]]).convex_hull
+                roof_polygons[self.edge_segments[1]] = MultiPoint([tip2, eps2[0], eps2[1]]).convex_hull
+                roof_polygons[self.gabled_segments[0][0]] = MultiPoint([tip1, tip2, eps1[0], eps2[0]]).convex_hull
+                roof_polygons[self.gabled_segments[0][1]] = MultiPoint([tip1, tip2, eps1[1], eps2[1]]).convex_hull
+                # roof_polygons.append(MultiPoint([tip1, eps1[0], eps1[1]]).convex_hull)
+                # roof_polygons.append(MultiPoint([tip2, eps2[0], eps2[1]]).convex_hull)
+                # roof_polygons.append(MultiPoint([tip1, tip2, eps1[0], eps2[0]]).convex_hull)
+                # roof_polygons.append(MultiPoint([tip1, tip2, eps1[1], eps2[1]]).convex_hull)
             case "corner_element":
+                roof_polygons = [None for _ in range(6)]
+
                 edge_top_points = []
                 edge_bottom_points = []
                 opposites = []
@@ -112,13 +118,19 @@ class HippedRoof(Roof):
                     self.segment_planes[opposites[1][1]], 
                 )
 
-                roof_polygons.append(MultiPoint([edge_top_points[0], edge_bottom_points[0][0], edge_bottom_points[0][1]]).convex_hull)
-                roof_polygons.append(MultiPoint([edge_top_points[1], edge_bottom_points[1][0], edge_bottom_points[1][1]]).convex_hull)
+                roof_polygons[self.edge_segments[0]] = MultiPoint([edge_top_points[0], edge_bottom_points[0][0], edge_bottom_points[0][1]]).convex_hull
+                roof_polygons[self.edge_segments[1]] = MultiPoint([edge_top_points[1], edge_bottom_points[1][0], edge_bottom_points[1][1]]).convex_hull
+                roof_polygons[left_right_segments[0][0]] = MultiPoint([edge_top_points[0], qip, bottom_center_point1, edge_bottom_points[0][0]]).convex_hull
+                roof_polygons[left_right_segments[0][1]] = MultiPoint([edge_top_points[0], qip, bottom_center_point2, edge_bottom_points[0][1]]).convex_hull
+                roof_polygons[left_right_segments[1][0]] = MultiPoint([edge_top_points[1], qip, bottom_center_point1, edge_bottom_points[1][1]]).convex_hull
+                roof_polygons[left_right_segments[1][1]] = MultiPoint([edge_top_points[1], qip, bottom_center_point2, edge_bottom_points[1][0]]).convex_hull
+                # roof_polygons.append(MultiPoint([edge_top_points[0], edge_bottom_points[0][0], edge_bottom_points[0][1]]).convex_hull)
+                # roof_polygons.append(MultiPoint([edge_top_points[1], edge_bottom_points[1][0], edge_bottom_points[1][1]]).convex_hull)
 
-                roof_polygons.append(MultiPoint([edge_top_points[0], qip,bottom_center_point1, edge_bottom_points[0][0]]).convex_hull)
-                roof_polygons.append(MultiPoint([edge_top_points[0], qip,bottom_center_point2, edge_bottom_points[0][1]]).convex_hull)
+                # roof_polygons.append(MultiPoint([edge_top_points[0], qip, bottom_center_point1, edge_bottom_points[0][0]]).convex_hull)
+                # roof_polygons.append(MultiPoint([edge_top_points[0], qip, bottom_center_point2, edge_bottom_points[0][1]]).convex_hull)
                 
-                roof_polygons.append(MultiPoint([edge_top_points[1], qip,bottom_center_point1, edge_bottom_points[1][1]]).convex_hull)
-                roof_polygons.append(MultiPoint([edge_top_points[1], qip,bottom_center_point2, edge_bottom_points[1][0]]).convex_hull)
+                # roof_polygons.append(MultiPoint([edge_top_points[1], qip, bottom_center_point1, edge_bottom_points[1][1]]).convex_hull)
+                # roof_polygons.append(MultiPoint([edge_top_points[1], qip, bottom_center_point2, edge_bottom_points[1][0]]).convex_hull)
 
         return roof_polygons

@@ -82,7 +82,7 @@ class GabledRoof(Roof):
     
     def create_roof_polygons(self):
 
-        roof_polygons = []
+        roof_polygons = [None for _ in range(len(self.segment_ids))]
 
         minx_main0, maxx_main0, _, _, minz_main0, _ = find_min_max_values(self.segment_xs[self.main_gabled_segments[0]], self.segment_ys[self.main_gabled_segments[0]], self.segment_zs[self.main_gabled_segments[0]])
         _, _, _, _, minz_main1, _ = find_min_max_values(self.segment_xs[self.main_gabled_segments[1]], self.segment_ys[self.main_gabled_segments[1]], self.segment_zs[self.main_gabled_segments[1]])
@@ -108,8 +108,8 @@ class GabledRoof(Roof):
         main_points = [{"main_tip": main_tip1, "main_ips": main_ips1}, {"main_tip": main_tip2, "main_ips": main_ips2}]
 
         if len(self.segment_ids) == 2:
-            roof_polygons.append(MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][0], main_points[1]["main_ips"][0]]).convex_hull)
-            roof_polygons.append(MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][1], main_points[1]["main_ips"][1]]).convex_hull)
+            roof_polygons[0] = MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][0], main_points[1]["main_ips"][0]]).convex_hull
+            roof_polygons[1] = MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][1], main_points[1]["main_ips"][1]]).convex_hull
         else:       
             used_main_segment = []
             for sub_match in self.sub_gabled_segments:
@@ -138,9 +138,9 @@ class GabledRoof(Roof):
 
                 opposite_index = 1 if closest_main_segment_index==0 else 0
 
-                roof_polygons.append(MultiPoint([main_sub_tip, sub_tip, main_sub_ips[0], sub_ips[0]]).convex_hull)
-                roof_polygons.append(MultiPoint([main_sub_tip, sub_tip, main_sub_ips[1], sub_ips[1]]).convex_hull)
-                roof_polygons.append(Polygon([
+                roof_polygons[sub_match[sub_seg_sides[1]]] = MultiPoint([main_sub_tip, sub_tip, main_sub_ips[0], sub_ips[0]]).convex_hull
+                roof_polygons[sub_match[sub_seg_sides[0]]] = MultiPoint([main_sub_tip, sub_tip, main_sub_ips[1], sub_ips[1]]).convex_hull
+                roof_polygons[self.main_gabled_segments[closest_main_segment_index]] = Polygon([
                     main_sub_tip, 
                     main_sub_ips[1], 
                     main_points[0]["main_ips"][opposite_index],
@@ -148,13 +148,24 @@ class GabledRoof(Roof):
                     main_points[1]["main_tip"],
                     main_points[1]["main_ips"][opposite_index],
                     main_sub_ips[0], 
-                ]))
+                ])
+                # roof_polygons.append(MultiPoint([main_sub_tip, sub_tip, main_sub_ips[0], sub_ips[0]]).convex_hull)
+                # roof_polygons.append(MultiPoint([main_sub_tip, sub_tip, main_sub_ips[1], sub_ips[1]]).convex_hull)
+                # roof_polygons.append(Polygon([
+                #     main_sub_tip, 
+                #     main_sub_ips[1], 
+                #     main_points[0]["main_ips"][opposite_index],
+                #     main_points[0]["main_tip"],
+                #     main_points[1]["main_tip"],
+                #     main_points[1]["main_ips"][opposite_index],
+                #     main_sub_ips[0], 
+                # ]))
 
                 used_main_segment.append(closest_main_segment_index)
                 
-            
             if len(used_main_segment) == 1:
                 opposite_index = 1 if used_main_segment[0]==0 else 0
-                roof_polygons.append(MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][used_main_segment[0]], main_points[1]["main_ips"][used_main_segment[0]]]).convex_hull)
+                roof_polygons[self.main_gabled_segments[opposite_index]] = MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][used_main_segment[0]], main_points[1]["main_ips"][used_main_segment[0]]]).convex_hull
+                # roof_polygons.append(MultiPoint([main_points[0]["main_tip"], main_points[1]["main_tip"], main_points[0]["main_ips"][used_main_segment[0]], main_points[1]["main_ips"][used_main_segment[0]]]).convex_hull)
         
         return roof_polygons
