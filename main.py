@@ -232,21 +232,13 @@ class Lo2D():
                                 if footprint_corner_points_used[sid2][i]:
                                     
                                     count2 = len([1 for i in range(i) if footprint_corner_points_used[sid2][i]])
-                                    # print(sid, sid2, i)
-                                    # print(i, count1, len(lol))
-                                    # print(len(updated_segment_points[sid]["bottom_points"]))
-                                    # print(updated_segment_points[sid]["bottom_points"][count1])
-                                    # print(footprint_corner_points_used[sid2])
+
                                     p1 = updated_segment_points[sid]["bottom_points"][count1]
                                     p2 = updated_segment_points[sid2]["bottom_points"][count2]
-                                    # print(p1, p2)
+
                                     avg_point = [(p1[0]+p2[0])/2, (p1[1]+p2[1])/2, (p1[2]+p2[2])/2]
                                     updated_segment_points[sid]["bottom_points"][count1] = avg_point
                                     updated_segment_points[sid2]["bottom_points"][count2] = avg_point
-                                    
-                                    # print()
-                                    # updated_corners.append(i)
-                                    # updated_corners.append(sid2)
 
                 if len(updated_polygon_points) <= 5:
                     upper_footprint.append(MultiPoint(updated_polygon_points).convex_hull)
@@ -339,8 +331,21 @@ class Lo2D():
             case "pointcloud_scatterplot_3d":
                 for roof_type in self.roof_data.roofs:
                     for roof_id in self.roof_data.roofs[roof_type]:
-                        plot_title = f'{roof_type}-{roof_id}'
-                        Plotter.scatterplot_3d(plot_title, *extract_variables_from_las_object(self.roof_data.roofs[roof_type][roof_id]))
+                        # plot_title = f'{roof_type}-{roof_id}'
+                        Plotter.scatterplot_3d(roof_id, roof_type, *extract_variables_from_las_object(self.roof_data.roofs[roof_type][roof_id]))
+            case "roof_segment_planes_3d":
+                for roof in self.roof_objects:
+                    # plot_title = f'{roof_type}-{roof_id}'
+                    coords = [[x, y, z] for x, y, z in zip(roof.segment_xs, roof.segment_ys, roof.segment_zs)]
+                    Plotter.planes_3d(roof.roof_id, roof.roof_type, roof.segment_planes, coords)
+            case "roof_polygons_3d":
+                for roof in self.roof_objects:
+                    Plotter.segmented_polygons_3d(
+                        roof.roof_id,
+                        roof.roof_type,
+                        roof.roof_polygons,
+                        # roof.upper_footprint,
+                    )
             case "roof_polygons_3d_v2":
                 for roof in self.roof_objects:
                     Plotter.double_segmented_polygons_3d(
@@ -358,13 +363,9 @@ class Lo2D():
                 for roof in self.roof_objects:
                     Plotter.roof_polygons_with_building_footprint(
                         roof.roof_id,
+                        roof.roof_type,
                         roof.roof_polygons,
                         roof.footprint,
-                        roof.segment_xs,
-                        roof.segment_ys,
-                        roof.segment_zs,
-                        10,
-                        'r'
                     )
             case "lo2d_buildings":
                 for roof in self.roof_objects:
@@ -373,6 +374,7 @@ class Lo2D():
                         roof.roof_type,
                         roof.upper_footprint,
                         roof.wall_polygons,
+                        [roof.segment_xs, roof.segment_ys, roof.segment_zs],
                     )
 
 if __name__ == "__main__":
@@ -383,7 +385,7 @@ if __name__ == "__main__":
     lo2d.fit()
 
     # lo2d.plot_data("pointcloud_scatterplot_3d")
-    # lo2d.plot_data("planes_3d")
+    # lo2d.plot_data("roof_segment_planes_3d")
     # lo2d.plot_data("roof_polygons_3d")
     # lo2d.plot_data("roof_polygons_3d_v2")
     # lo2d.plot_data("roof_polygons_with_footprint")
